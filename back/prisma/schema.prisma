@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         UserRole @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  resumes   Resume[]
+  usages    DailyUsage[]
+  sessions  UserSession[]
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  userAgent String?
+  ipHash    String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AnonymousSession {
+  id          String   @id @default(cuid())
+  fingerprint String   @unique
+  firstIpHash String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  usages DailyUsage[]
+}
+
+model DailyUsage {
+  id                 String   @id @default(cuid())
+  userId             String?
+  anonymousSessionId String?
+  date               String
+  usedCount          Int      @default(0)
+  limitCount         Int      @default(3)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user             User?             @relation(fields: [userId], references: [id])
+  anonymousSession AnonymousSession? @relation(fields: [anonymousSessionId], references: [id])
+
+  @@unique([userId, date])
+  @@unique([anonymousSessionId, date])
+  @@index([date])
+}
+
+model Resume {
+  id             String   @id @default(cuid())
+  userId         String?
+  sessionId      String?
+  originalName   String?
+  originalText   String   @db.LongText
+  targetJob      String
+  jobDescription String?  @db.LongText
+  jobStage       String
+  outputLanguage String
+  optimizeLevel  String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user     User?              @relation(fields: [userId], references: [id])
+  analyses ResumeAnalysis[]
+  versions OptimizedVersion[]
+}
+
+model ResumeAnalysis {
+  id            String   @id @default(cuid())
+  resumeId      String
+  score         Int
+  matchRate     Int
+  analysisJson  Json
+  skillName     String   @default("resume-optimizer")
+  skillVersion  String?
+  promptVersion String?
+  createdAt     DateTime @default(now())
+
+  resume Resume @relation(fields: [resumeId], references: [id])
+}
+
+model OptimizedVersion {
+  id             String   @id @default(cuid())
+  resumeId       String
+  versionName    String
+  optimizedJson  Json
+  snapshotJson    Json?
+  lapisMarkdown  String?  @db.LongText
+  lapisTheme     String   @default("lapis-cv")
+  skillName      String   @default("resume-optimizer")
+  skillVersion   String?
+  promptVersion  String?
+  restoredFromVersionId String?
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  resume Resume @relation(fields: [resumeId], references: [id])
+
+  @@index([resumeId, createdAt])
+  @@index([deletedAt])
+  @@index([restoredFromVersionId])
+}
+
+model SupportConfig {
+  id          String   @id @default(cuid())
+  afdianUrl   String?
+  wechatQrUrl String?
+  alipayQrUrl String?
+  enabled     Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}

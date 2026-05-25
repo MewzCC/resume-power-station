@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+.next/
+coverage/
+front/dist/
+back/dist/
+
+# local runtime files
+runtime/
+logs/
+*.log
+public/downloads/
+back/public/downloads/
+front/tmp/
+front/screenshots/
+
+# environment secrets
+.env
+.env.*
+!.env.example
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# temporary files
+tmp/
+.cache/
+.turbo/
