@@ -55,9 +55,6 @@ npm run dev
 
 ## 🔒 安全说明
 
-- `.env` 已被 `.gitignore` 忽略，仓库只提交 `.env.example`
-- 验证码只写入 Redis，不落 MySQL
-- 免费次数由后端鉴权后计算，前端展示只作为 UI
 - 生产环境请配置 HTTPS、强随机 Cookie Secret、严格 CORS 域名
 
 ## 📚 子项目文档
