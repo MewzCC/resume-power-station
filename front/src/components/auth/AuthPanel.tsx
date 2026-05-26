@@ -195,7 +195,8 @@ export function AuthPanel({
         </div>
 
         {!isRegister && (
-          <div className="auth-methods" role="tablist" aria-label="登录方式">
+          <div className={`auth-methods auth-methods--${loginMethod === 'code' ? 'code' : 'password'}`} role="tablist" aria-label="登录方式">
+            <span className="auth-methods__glider" aria-hidden="true" />
             <button
               className={loginMethod === 'password' ? 'is-selected' : ''}
               onClick={() => setLoginMethod('password')}
