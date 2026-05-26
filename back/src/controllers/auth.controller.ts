@@ -24,6 +24,20 @@ import {
 } from '../services/auth.service.js'
 import { EmailCodeError, requestEmailCode } from '../services/email-code.service.js'
 
+function authErrorStatus(error: AuthError) {
+  if (error.code === 'EMAIL_ALREADY_EXISTS') return 409
+  if (error.code === 'EMAIL_NOT_REGISTERED') return 404
+  if (error.code === 'UNAUTHENTICATED') return 401
+  return 401
+}
+
+function emailCodeErrorStatus(error: EmailCodeError) {
+  if (error.code === 'EMAIL_CODE_TOO_FREQUENT') return 429
+  if (error.code === 'EMAIL_ALREADY_EXISTS') return 409
+  if (error.code === 'EMAIL_NOT_REGISTERED') return 404
+  return 400
+}
+
 export async function registerController(request: FastifyRequest, reply: FastifyReply) {
   const parsed = registerSchema.safeParse(request.body)
   if (!parsed.success) {
@@ -39,9 +53,9 @@ export async function registerController(request: FastifyRequest, reply: Fastify
     })
   } catch (error) {
     if (error instanceof AuthError) {
-      return sendError(reply, 409, error.code, error.message)
+      return sendError(reply, authErrorStatus(error), error.code, error.message)
     }
-    return sendError(reply, 500, 'INTERNAL_ERROR', '注册失败')
+    return sendError(reply, 500, 'INTERNAL_ERROR', '注册失败，请稍后重试')
   }
 }
 
@@ -60,9 +74,9 @@ export async function loginController(request: FastifyRequest, reply: FastifyRep
     })
   } catch (error) {
     if (error instanceof AuthError) {
-      return sendError(reply, 401, error.code, error.message)
+      return sendError(reply, authErrorStatus(error), error.code, error.message)
     }
-    return sendError(reply, 500, 'INTERNAL_ERROR', '登录失败')
+    return sendError(reply, 500, 'INTERNAL_ERROR', '登录失败，请稍后重试')
   }
 }
 
@@ -79,11 +93,7 @@ export async function sendEmailCodeController(request: FastifyRequest, reply: Fa
     return ok(result)
   } catch (error) {
     if (error instanceof EmailCodeError) {
-      const status = error.code === 'EMAIL_CODE_TOO_FREQUENT' ? 429
-        : error.code === 'EMAIL_ALREADY_EXISTS' ? 409
-          : error.code === 'EMAIL_NOT_REGISTERED' ? 404
-            : 500
-      return sendError(reply, status, error.code, error.message)
+      return sendError(reply, emailCodeErrorStatus(error), error.code, error.message)
     }
     return sendError(reply, 500, 'EMAIL_CODE_SEND_FAILED', '验证码邮件发送失败，请稍后重试')
   }
@@ -103,11 +113,13 @@ export async function emailCodeRegisterController(request: FastifyRequest, reply
       expiresAt: result.expiresAt,
     })
   } catch (error) {
-    if (error instanceof AuthError || error instanceof EmailCodeError) {
-      const status = error.code === 'EMAIL_ALREADY_EXISTS' ? 409 : 400
-      return sendError(reply, status, error.code, error.message)
+    if (error instanceof AuthError) {
+      return sendError(reply, authErrorStatus(error), error.code, error.message)
     }
-    return sendError(reply, 500, 'INTERNAL_ERROR', '注册失败')
+    if (error instanceof EmailCodeError) {
+      return sendError(reply, emailCodeErrorStatus(error), error.code, error.message)
+    }
+    return sendError(reply, 500, 'INTERNAL_ERROR', '注册失败，请稍后重试')
   }
 }
 
@@ -125,10 +137,13 @@ export async function emailCodeLoginController(request: FastifyRequest, reply: F
       expiresAt: result.expiresAt,
     })
   } catch (error) {
-    if (error instanceof AuthError || error instanceof EmailCodeError) {
-      return sendError(reply, 401, error.code, error.message)
+    if (error instanceof AuthError) {
+      return sendError(reply, authErrorStatus(error), error.code, error.message)
     }
-    return sendError(reply, 500, 'INTERNAL_ERROR', '登录失败')
+    if (error instanceof EmailCodeError) {
+      return sendError(reply, emailCodeErrorStatus(error), error.code, error.message)
+    }
+    return sendError(reply, 500, 'INTERNAL_ERROR', '登录失败，请稍后重试')
   }
 }
 
@@ -141,17 +156,20 @@ export async function resetPasswordController(request: FastifyRequest, reply: Fa
   try {
     return ok(await resetPasswordWithEmailCode(parsed.data))
   } catch (error) {
-    if (error instanceof AuthError || error instanceof EmailCodeError) {
-      return sendError(reply, 400, error.code, error.message)
+    if (error instanceof AuthError) {
+      return sendError(reply, authErrorStatus(error), error.code, error.message)
     }
-    return sendError(reply, 500, 'INTERNAL_ERROR', '重置密码失败')
+    if (error instanceof EmailCodeError) {
+      return sendError(reply, emailCodeErrorStatus(error), error.code, error.message)
+    }
+    return sendError(reply, 500, 'INTERNAL_ERROR', '重置密码失败，请稍后重试')
   }
 }
 
 export async function meController(request: FastifyRequest, reply: FastifyReply) {
   const user = await getUserFromToken(authTokenFromRequest(request))
   if (!user) {
-    return sendError(reply, 401, 'UNAUTHENTICATED', '未登录')
+    return sendError(reply, 401, 'UNAUTHENTICATED', '未登录或登录已过期')
   }
 
   return ok({ user })

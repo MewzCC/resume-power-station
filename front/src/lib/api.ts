@@ -67,6 +67,7 @@ const friendlyErrorMessages: Partial<Record<ApiError['code'], string>> = {
   EMAIL_CODE_TOO_FREQUENT: '验证码发送太频繁，请稍后再试。',
   EMAIL_CODE_SEND_FAILED: '验证码邮件发送失败，请稍后重试。',
   INVALID_CREDENTIALS: '邮箱、密码或验证码不正确，请重新输入。',
+  PASSWORD_INCORRECT: '密码错误，请重新输入。',
   UNAUTHENTICATED: '请先登录后再使用免费优化次数。',
   DAILY_LIMIT_EXCEEDED: '今天的 3 次免费优化已经用完，明天可以继续使用。',
   FILE_TOO_LARGE: '文件超过大小限制，请上传 10MB 以内的文件。',

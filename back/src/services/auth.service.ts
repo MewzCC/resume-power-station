@@ -18,7 +18,12 @@ export const authCookieName = 'resume_auth_token'
 const sessionMaxAgeSeconds = 60 * 60 * 24 * 30
 
 export class AuthError extends Error {
-  code: 'EMAIL_ALREADY_EXISTS' | 'INVALID_CREDENTIALS' | 'UNAUTHENTICATED'
+  code:
+    | 'EMAIL_ALREADY_EXISTS'
+    | 'EMAIL_NOT_REGISTERED'
+    | 'PASSWORD_INCORRECT'
+    | 'INVALID_CREDENTIALS'
+    | 'UNAUTHENTICATED'
 
   constructor(code: AuthError['code'], message: string) {
     super(message)
@@ -94,8 +99,13 @@ export async function registerUser(input: RegisterInput, request: FastifyRequest
 export async function loginUser(input: LoginInput, request: FastifyRequest) {
   const email = normalizeEmail(input.email)
   const user = await prisma.user.findUnique({ where: { email } })
-  if (!user || !(await verifyPassword(input.password, user.passwordHash))) {
-    throw new AuthError('INVALID_CREDENTIALS', '邮箱或密码不正确')
+  if (!user) {
+    throw new AuthError('EMAIL_NOT_REGISTERED', '该邮箱尚未注册，请先免费注册')
+  }
+
+  const passwordMatched = await verifyPassword(input.password, user.passwordHash)
+  if (!passwordMatched) {
+    throw new AuthError('PASSWORD_INCORRECT', '密码错误，请重新输入')
   }
 
   const session = await createSession(user.id, request)
@@ -137,7 +147,7 @@ export async function loginUserWithEmailCode(input: EmailCodeLoginInput, request
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) {
-    throw new AuthError('INVALID_CREDENTIALS', '该邮箱尚未注册，请先免费注册')
+    throw new AuthError('EMAIL_NOT_REGISTERED', '该邮箱尚未注册，请先免费注册')
   }
 
   const session = await createSession(user.id, request)
@@ -154,7 +164,7 @@ export async function resetPasswordWithEmailCode(input: ResetPasswordInput) {
 
   const user = await prisma.user.findUnique({ where: { email } })
   if (!user) {
-    throw new AuthError('INVALID_CREDENTIALS', '该邮箱尚未注册，请先免费注册')
+    throw new AuthError('EMAIL_NOT_REGISTERED', '该邮箱尚未注册，请先免费注册')
   }
 
   await prisma.user.update({
