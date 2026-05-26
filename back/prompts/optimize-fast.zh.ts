@@ -1,6 +1,6 @@
 import type { AnalyzeResumeInput } from '../src/schemas/resume.js'
 
-export const FAST_OPTIMIZE_PROMPT_VERSION = 'fast_optimize_zh_structured_v2'
+export const FAST_OPTIMIZE_PROMPT_VERSION = 'fast_optimize_zh_structured_v3'
 
 function todayInShanghai() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -11,34 +11,51 @@ function todayInShanghai() {
   }).format(new Date())
 }
 
+const jobStageCopy: Record<AnalyzeResumeInput['jobStage'], string> = {
+  internship: '实习：突出基础能力、学习速度、项目参与度与可培养性。可以保留课程/校园项目，但要说明实际动作。',
+  campus: '校招：突出课程、竞赛、校园项目、实习与岗位基础能力的匹配。不要用资深社招口吻包装。',
+  social: '社招：突出真实业务结果、独立交付、复杂问题解决、稳定性、效率、成本、质量和可量化影响。',
+  graduate: '研究生：突出科研、论文、实验、工程深度、技术路线、方法论和可复现实验结果。',
+  career_change: '转行：突出迁移能力，把过往经历映射到目标岗位能力，补充学习路径和可验证项目证据。',
+  other: '其他：按通用求职场景优化，优先保证真实性、岗位匹配度、可读性和完整性。',
+}
+
+const languageCopy: Record<AnalyzeResumeInput['outputLanguage'], string> = {
+  zh: '输出中文简历与中文分析，适合国内岗位投递。',
+  en: '输出英文简历与英文分析，适合外企、海外项目或英文 JD。专有名词可保留英文，中文学校/公司名可给出英文占位。',
+}
+
+const levelCopy: Record<AnalyzeResumeInput['optimizeLevel'], string> = {
+  conservative: '保守：少改写，尽量保留原表达和原结构，只修复明显不清楚、错序、冗余和格式问题。',
+  standard: '标准：在不改变事实的前提下重组表达，强化岗位关键词、动作、产物、结果和可读性。',
+  strong: '增强：更积极地重组内容顺序、拆分模块、提炼价值和关键词；允许加入【待补充】指标提示，但不得编造事实。',
+}
+
 export function buildFastOptimizePrompt(input: AnalyzeResumeInput) {
   return `今天日期：${todayInShanghai()}（按 Asia/Shanghai 判断时间；如果原文只写到月份，例如 2026.05，在 2026-05 期间不应判定为未来时间）
 
-目标岗位：
-${input.targetJob}
+目标岗位：${input.targetJob}
 
-岗位 JD：
-${input.jobDescription || '用户未提供 JD，请按目标岗位通用要求优化，并提醒用户补充 JD。'}
+岗位 JD：${input.jobDescription || '用户未提供 JD，请按目标岗位通用要求优化，并提醒用户补充 JD。'}
 
-求职阶段：
-${input.jobStage}
-
-输出语言：
-${input.outputLanguage}
-
-优化强度：
-${input.optimizeLevel}
+前端优化参数必须生效：
+- 简历类型 jobStage=${input.jobStage}：${jobStageCopy[input.jobStage]}
+- 输出语言 outputLanguage=${input.outputLanguage}：${languageCopy[input.outputLanguage]}
+- 优化强度 optimizeLevel=${input.optimizeLevel}：${levelCopy[input.optimizeLevel]}
 
 原始简历：
 ${input.resumeText}
 
 请一次性完成简历诊断和结构化优化。
-
 安全要求：
 - 只能优化用户已有经历的表达，不得编造公司、学校、项目、证书、时间和具体数字。
-- 原始简历里出现过的教育、实习、项目、校园经历、奖项、技能、联系方式必须保留，不允许整段删除；无法判断归属时放入最接近的模块，并用【待补充】提醒用户核对。
+- 原始简历里出现过的教育、实习、项目、校园经历、奖项、技能、联系方式必须尽量保留，不允许整段删除；无法判断归属时放入最接近的模块，并用【待补充】提醒用户核对。
 - 不要把“当前月份或已过去月份”误判为未来时间；只有明确晚于今天日期的时间才提示核对。
 - 缺失信息必须使用【待补充】。
+- 如果 outputLanguage=en，optimizedResume、analysis、lapisMarkdown 渲染来源都应使用英文表达。
+- 如果 jobStage=social，价值提炼必须更关注业务结果、独立交付、稳定性、性能、成本、效率、质量等社招信号。
+- 如果 jobStage=career_change，必须提炼迁移能力，并指出需要补充的目标岗位证据。
+- 如果 optimizeLevel=strong，可以大幅重组表达，但不能删除原有关键经历，不能编造结果。
 - 不输出 Markdown，不输出解释，不输出代码块。
 - JSON 字段必须完整，数组没有内容时返回 []。
 - mainProblems 最多 4 条，valueExtraction 最少 2 条最多 5 条。

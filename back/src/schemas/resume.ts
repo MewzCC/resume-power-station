@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const jobStageSchema = z.enum(['internship', 'campus', 'graduate', 'other'])
+export const jobStageSchema = z.enum(['internship', 'campus', 'social', 'graduate', 'career_change', 'other'])
 export const outputLanguageSchema = z.enum(['zh', 'en'])
 export const optimizeLevelSchema = z.enum(['conservative', 'standard', 'strong'])
 export const lapisThemeSchema = z.enum(['lapis-cv', 'lapis-cv-serif'])
