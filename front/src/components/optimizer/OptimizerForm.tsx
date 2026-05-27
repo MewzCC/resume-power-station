@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent, MutableRefObject } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CheckCircle2, CloudUpload, Clock3, FileText, LockKeyhole, Sparkles, XCircle, Zap } from 'lucide-react'
@@ -158,6 +158,7 @@ export function OptimizerForm({
   const [isSegmenting, setIsSegmenting] = useState(false)
   const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const segmentTextBufferRef = useRef('')
   const currentStageIndex = activeStageIndex(elapsedSeconds)
   const fallbackStage = analysisStages[currentStageIndex]
   const serverCopy = serverStage ? stageCopy[serverStage.stage] : null
@@ -193,7 +194,22 @@ export function OptimizerForm({
       setAnalysisFeedback(event.message)
     }
 
+    if (event.stage === 'writing') {
+      segmentTextBufferRef.current = ''
+      setResumeText('')
+      setSourceResumeId(undefined)
+      return
+    }
+
+    if (event.stage === 'text_delta' && event.delta) {
+      segmentTextBufferRef.current += event.delta
+      setResumeText(segmentTextBufferRef.current)
+      setSourceResumeId(undefined)
+      return
+    }
+
     if (event.text) {
+      segmentTextBufferRef.current = event.text
       setResumeText(event.text)
       setSourceResumeId(undefined)
     }

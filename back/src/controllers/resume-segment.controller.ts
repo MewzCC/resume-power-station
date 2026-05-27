@@ -26,6 +26,34 @@ function writeError(reply: FastifyReply, code: Parameters<typeof fail>[0], messa
   })
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+async function writeTextDeltas(reply: FastifyReply, text: string) {
+  const chars = Array.from(text)
+  const chunkSize = 10
+  const total = Math.max(1, chars.length)
+
+  for (let index = 0; index < chars.length; index += chunkSize) {
+    const delta = chars.slice(index, index + chunkSize).join('')
+    const typed = Math.min(total, index + chunkSize)
+    const progress = Math.min(98, 60 + Math.round((typed / total) * 38))
+
+    writeEvent(reply, {
+      stage: 'text_delta',
+      progress,
+      delta,
+      typed,
+      total,
+    })
+
+    await sleep(10)
+  }
+}
+
 function corsHeadersFor(request: FastifyRequest) {
   const origin = request.headers.origin
   if (!origin) return {}
@@ -110,6 +138,13 @@ export async function segmentResumeStreamController(request: FastifyRequest, rep
     })
 
     const result = await segmentResumeText(parsed.data)
+    writeEvent(reply, {
+      stage: 'writing',
+      progress: 60,
+      message: `AI 已完成结构识别，正在流式写入 ${result.sections.length} 个模块。`,
+    })
+    await writeTextDeltas(reply, result.text)
+
     writeEvent(reply, {
       stage: 'done',
       progress: 100,

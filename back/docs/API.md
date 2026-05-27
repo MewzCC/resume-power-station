@@ -134,7 +134,7 @@ fetch(url, { credentials: 'include' })
 事件格式：
 
 ```text
-data: {"stage":"done","progress":100,"message":"AI 分块完成：6 个模块。","text":"【基本信息】...","sections":[...],"warnings":[]}
+data: {"stage":"text_delta","progress":72,"delta":"【基本信息】\n张三","typed":20,"total":1800}
 ```
 
 阶段：
@@ -143,6 +143,8 @@ data: {"stage":"done","progress":100,"message":"AI 分块完成：6 个模块。
 |---|---|
 | `accepted` | 后端已接收简历文本 |
 | `segmenting` | 正在调用 AI 校正文档结构和模块归属 |
+| `writing` | AI 已完成结构识别，前端应清空正文框并准备追加文本 |
+| `text_delta` | 分块正文增量，前端应把 `delta` 追加到正文框，形成打字机效果 |
 | `done` | AI 分块完成，事件中包含完整 `result`、`text`、`sections` |
 | `error` | 分块失败，事件中包含 `error` |
 

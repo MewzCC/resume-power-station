@@ -105,6 +105,8 @@ export type SegmentResumeResult = {
 export type SegmentResumeStreamStage =
   | 'accepted'
   | 'segmenting'
+  | 'writing'
+  | 'text_delta'
   | 'done'
   | 'error'
 
@@ -112,6 +114,9 @@ export type SegmentResumeStreamEvent = {
   stage: SegmentResumeStreamStage
   progress: number
   message?: string
+  delta?: string
+  typed?: number
+  total?: number
   text?: string
   sections?: ResumeSegment[]
   warnings?: string[]
