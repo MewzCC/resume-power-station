@@ -346,7 +346,7 @@ function detectSegmentType(line: string): ResumeSegmentType | null {
   return null
 }
 
-function heuristicSegmentResume(input: SegmentResumeInput): ResumeSegmentResult {
+export function heuristicSegmentResume(input: SegmentResumeInput): ResumeSegmentResult {
   const sections: ResumeSegment[] = []
   let currentType: ResumeSegmentType = 'basic'
   let currentTitle = segmentTitleByType.basic
@@ -389,7 +389,7 @@ function heuristicSegmentResume(input: SegmentResumeInput): ResumeSegmentResult 
 
   return {
     sections: normalized,
-    warnings: ['已使用规则分块兜底，建议点击 AI 分块获得更准确结果。'],
+    warnings: ['已使用规则完成初步分块，AI 分块完成后会自动替换为更准确结果。'],
     text: formatSegmentedResumeText(normalized),
   }
 }

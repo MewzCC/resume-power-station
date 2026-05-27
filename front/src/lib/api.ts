@@ -26,6 +26,7 @@ import type {
   User,
   ResumeVersionHistoryDetail,
   ResumeVersionHistoryListResult,
+  SegmentResumeStreamEvent,
 } from '../types/api'
 import type { ResumeDiffData } from '../types/resume'
 import { notifyError } from './error-events'
@@ -288,6 +289,117 @@ export function segmentResumeText(input: { resumeText: string; originalName?: st
   })
 }
 
+export async function segmentResumeTextStream(
+  input: { resumeText: string; originalName?: string },
+  onEvent: (event: SegmentResumeStreamEvent) => void,
+  requestOptions: AbortableRequest = {},
+) {
+  const timeout = createTimeoutController(requestOptions.signal, AI_ANALYSIS_TIMEOUT_MS)
+  let response: Response
+
+  try {
+    response = await fetch(`${API_BASE}/api/resumes/segment/stream`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
+      },
+      body: JSON.stringify(input),
+      signal: timeout.signal,
+    })
+  } catch (requestError) {
+    const error = isAbortError(requestError)
+      ? toAbortApiError(timeout.getAbortReason())
+      : normalizeError({ code: 'NETWORK_ERROR', message: '无法连接服务器，请确认服务端是否正常。' })
+    if (error.code !== 'REQUEST_CANCELLED') {
+      notifyError(error.message)
+    }
+    timeout.cleanup()
+    throw new ApiRequestError(error)
+  }
+
+  if (!response.ok) {
+    timeout.cleanup()
+    const payload = (await response.json()) as ApiResponse<unknown>
+    const error = normalizeError(payload.success
+      ? { code: 'NETWORK_ERROR' as const, message: '请求失败，请稍后重试。' }
+      : payload.error)
+    notifyError(error.message)
+    throw new ApiRequestError(error, response.status)
+  }
+
+  if (!response.body) {
+    timeout.cleanup()
+    const error = normalizeError({
+      code: 'NETWORK_ERROR',
+      message: '服务器未返回流式响应。',
+    })
+    notifyError(error.message)
+    throw new ApiRequestError(error)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: SegmentResumeResult | undefined
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const frames = buffer.split(/\r?\n\r?\n/)
+      buffer = frames.pop() ?? ''
+
+      for (const frame of frames) {
+        const event = parseSseFrame<SegmentResumeStreamEvent>(frame)
+        if (!event) continue
+
+        onEvent(event)
+
+        if (event.stage === 'error' && event.error) {
+          const error = normalizeError(event.error)
+          notifyError(error.message)
+          throw new ApiRequestError(error)
+        }
+
+        if (event.stage === 'done') {
+          result = event.result ?? (
+            event.text && event.sections
+              ? { text: event.text, sections: event.sections, warnings: event.warnings ?? [] }
+              : undefined
+          )
+        }
+      }
+    }
+  } catch (requestError) {
+    if (!isAbortError(requestError)) {
+      throw requestError
+    }
+
+    const error = toAbortApiError(timeout.getAbortReason())
+    if (error.code !== 'REQUEST_CANCELLED') {
+      notifyError(error.message)
+    }
+    throw new ApiRequestError(error)
+  } finally {
+    timeout.cleanup()
+  }
+
+  if (!result) {
+    const error = normalizeError({
+      code: 'NETWORK_ERROR',
+      message: 'AI 分块任务未返回结果，请稍后重试。',
+    })
+    notifyError(error.message)
+    throw new ApiRequestError(error)
+  }
+
+  return result
+}
+
 export function analyzeResume(payload: AnalyzeResumePayload, requestOptions: AbortableRequest = {}) {
   return request<AnalyzeResumeResult>('/api/resumes/analyze', {
     method: 'POST',
@@ -318,7 +430,7 @@ export function optimizeResume(
   })
 }
 
-function parseSseFrame(frame: string): OptimizeStreamEvent | null {
+function parseSseFrame<T>(frame: string): T | null {
   const data = frame
     .split(/\r?\n/)
     .filter((line) => line.startsWith('data:'))
@@ -326,7 +438,7 @@ function parseSseFrame(frame: string): OptimizeStreamEvent | null {
     .join('\n')
 
   if (!data) return null
-  return JSON.parse(data) as OptimizeStreamEvent
+  return JSON.parse(data) as T
 }
 
 export async function optimizeResumeStream(
@@ -395,7 +507,7 @@ export async function optimizeResumeStream(
       buffer = frames.pop() ?? ''
 
       for (const frame of frames) {
-        const event = parseSseFrame(frame)
+        const event = parseSseFrame<OptimizeStreamEvent>(frame)
         if (!event) continue
 
         onEvent(event)

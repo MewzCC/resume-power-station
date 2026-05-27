@@ -102,6 +102,24 @@ export type SegmentResumeResult = {
   warnings: string[]
 }
 
+export type SegmentResumeStreamStage =
+  | 'accepted'
+  | 'initial_text'
+  | 'segmenting'
+  | 'done'
+  | 'error'
+
+export type SegmentResumeStreamEvent = {
+  stage: SegmentResumeStreamStage
+  progress: number
+  message?: string
+  text?: string
+  sections?: ResumeSegment[]
+  warnings?: string[]
+  result?: SegmentResumeResult
+  error?: ApiError
+}
+
 export type JobStage = 'internship' | 'campus' | 'social' | 'graduate' | 'career_change' | 'other'
 export type OutputLanguage = 'zh' | 'en'
 export type OptimizeLevel = 'conservative' | 'standard' | 'strong'

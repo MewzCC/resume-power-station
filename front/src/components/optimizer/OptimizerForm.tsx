@@ -9,10 +9,10 @@ import {
   optimizeResume,
   optimizeResumeStream,
   parseResumeFile,
-  segmentResumeText,
+  segmentResumeTextStream,
 } from '../../lib/api'
 import { cleanResumeText, extractResumeSections } from '../../lib/resume-parser'
-import type { AnalyzeResumeResult, JobStage, OptimizeLevel, OptimizeStreamEvent, OutputLanguage, TodayUsage } from '../../types/api'
+import type { AnalyzeResumeResult, JobStage, OptimizeLevel, OptimizeStreamEvent, OutputLanguage, SegmentResumeStreamEvent, TodayUsage } from '../../types/api'
 import type { Navigate } from '../../types/navigation'
 import { FormStep } from '../ui/FormStep'
 import { InfoNote } from '../ui/InfoNote'
@@ -192,6 +192,17 @@ export function OptimizerForm({
     return () => window.clearInterval(timer)
   }, [analysisStartedAt, isAnalyzing])
 
+  function applySegmentStreamEvent(event: SegmentResumeStreamEvent) {
+    if (event.message) {
+      setAnalysisFeedback(event.message)
+    }
+
+    if (event.text) {
+      setResumeText(event.text)
+      setSourceResumeId(undefined)
+    }
+  }
+
   async function handleResumeFile(file: File) {
     if (!isAuthenticated) {
       setAnalysisFeedback('请先登录后再解析简历文件。')
@@ -218,22 +229,27 @@ export function OptimizerForm({
       }
       const cleanedText = layoutText.length >= 120 ? layoutText : cleanResumeText(parsed?.text ?? '')
       const parsedName = parsed?.originalName ?? file.name
-      let nextText = cleanedText
-      let nextSourceResumeId = parsed?.resumeId
       let feedback = layoutText.length >= 120
         ? `已按 PDF 版面解析 ${parsedName}，正在调用 AI 分块整理。`
         : `已解析并清洗 ${parsedName}，正在调用 AI 分块整理。`
 
+      setResumeText(cleanedText)
+      setOriginalName(parsedName)
+      setSourceResumeId(parsed?.resumeId)
+      setAnalysisFeedback(feedback)
+
       if (cleanedText.length >= 80) {
-        setAnalysisFeedback(feedback)
         setIsSegmenting(true)
         try {
-          const segmented = await segmentResumeText({
-            resumeText: cleanedText,
-            originalName: parsedName,
-          })
-          nextText = segmented.text
-          nextSourceResumeId = undefined
+          const segmented = await segmentResumeTextStream(
+            {
+              resumeText: cleanedText,
+              originalName: parsedName,
+            },
+            applySegmentStreamEvent,
+          )
+          setResumeText(segmented.text)
+          setSourceResumeId(undefined)
           feedback = `文件已解析，AI 已整理出 ${segmented.sections.length} 个模块。`
         } catch (segmentError) {
           feedback = segmentError instanceof ApiRequestError
@@ -242,11 +258,12 @@ export function OptimizerForm({
         } finally {
           setIsSegmenting(false)
         }
+      } else {
+        feedback = layoutText.length >= 120
+          ? `已按 PDF 版面解析 ${parsedName}，但正文较短，请检查后再继续。`
+          : `已解析并清洗 ${parsedName}，但正文较短，请检查后再继续。`
       }
 
-      setResumeText(nextText)
-      setOriginalName(parsedName)
-      setSourceResumeId(nextSourceResumeId)
       setAnalysisFeedback(feedback)
     } catch (requestError) {
       setAnalysisFeedback(requestError instanceof ApiRequestError ? requestError.message : '文件解析失败，请改用文本粘贴。')
@@ -309,10 +326,13 @@ export function OptimizerForm({
     setIsSegmenting(true)
 
     try {
-      const result = await segmentResumeText({
-        resumeText: cleaned,
-        originalName,
-      })
+      const result = await segmentResumeTextStream(
+        {
+          resumeText: cleaned,
+          originalName,
+        },
+        applySegmentStreamEvent,
+      )
       setResumeText(result.text)
       setSourceResumeId(undefined)
       setAnalysisFeedback(`AI 已整理出 ${result.sections.length} 个模块，可继续检查正文后开始分析。`)
