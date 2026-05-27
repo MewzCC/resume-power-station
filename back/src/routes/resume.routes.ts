@@ -8,6 +8,7 @@ import {
   unarchiveHistoryController,
 } from '../controllers/history.controller.js'
 import { analyzeResumeController } from '../controllers/resume-analyze.controller.js'
+import { segmentResumeController } from '../controllers/resume-segment.controller.js'
 import { optimizeResumeStreamController } from '../controllers/resume-stream.controller.js'
 import {
   createResumeController,
@@ -43,6 +44,7 @@ export async function resumeRoutes(app: FastifyInstance) {
   app.get('/api/resumes', listResumesController)
   app.post('/api/resumes', createResumeController)
   app.post('/api/resumes/parse', parseResumeController)
+  app.post('/api/resumes/segment', segmentResumeController)
   app.post('/api/resumes/analyze', analyzeResumeController)
   app.post('/api/resumes/:id/optimize/stream', optimizeResumeStreamController)
   app.post('/api/resumes/:id/optimize', optimizeResumeController)

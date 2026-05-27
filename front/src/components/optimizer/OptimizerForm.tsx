@@ -9,6 +9,7 @@ import {
   optimizeResume,
   optimizeResumeStream,
   parseResumeFile,
+  segmentResumeText,
 } from '../../lib/api'
 import { cleanResumeText, extractResumeSections } from '../../lib/resume-parser'
 import type { AnalyzeResumeResult, JobStage, OptimizeLevel, OptimizeStreamEvent, OutputLanguage, TodayUsage } from '../../types/api'
@@ -158,6 +159,7 @@ export function OptimizerForm({
   usage,
 }: OptimizerFormProps) {
   const [isParsing, setIsParsing] = useState(false)
+  const [isSegmenting, setIsSegmenting] = useState(false)
   const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const currentStageIndex = activeStageIndex(elapsedSeconds)
@@ -264,6 +266,37 @@ export function OptimizerForm({
 
   function handleCancelAnalyze() {
     cancelAnalysis()
+  }
+
+  async function handleAiSegment() {
+    if (!isAuthenticated) {
+      setAnalysisFeedback('请先登录后再使用 AI 分块整理。')
+      go('login')
+      return
+    }
+
+    const cleaned = cleanResumeText(resumeText)
+    if (cleaned.length < 80) {
+      setAnalysisFeedback('简历内容太短，暂时无法进行 AI 分块整理。')
+      return
+    }
+
+    setAnalysisFeedback(null)
+    setIsSegmenting(true)
+
+    try {
+      const result = await segmentResumeText({
+        resumeText: cleaned,
+        originalName,
+      })
+      setResumeText(result.text)
+      setSourceResumeId(undefined)
+      setAnalysisFeedback(`AI 已整理出 ${result.sections.length} 个模块，可继续检查正文后开始分析。`)
+    } catch (requestError) {
+      setAnalysisFeedback(requestError instanceof ApiRequestError ? requestError.message : 'AI 分块整理失败，请稍后重试。')
+    } finally {
+      setIsSegmenting(false)
+    }
   }
 
   async function handleAnalyze() {
@@ -438,8 +471,12 @@ export function OptimizerForm({
                   </li>
                 ))}
               </ul>
-              <button type="button" onClick={() => setResumeText(cleanResumeText(resumeText))}>
-                重新整理格式
+              <button
+                type="button"
+                disabled={isSegmenting || isAnalyzing || isParsing}
+                onClick={handleAiSegment}
+              >
+                {isSegmenting ? 'AI 分块中...' : 'AI 分块整理'}
               </button>
             </div>
           )}
@@ -516,6 +553,12 @@ export function OptimizerForm({
             </div>
           </div>
         </FormStep>
+
+        {analysisFeedback && (
+          <motion.p className="form-feedback" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+            {analysisFeedback}
+          </motion.p>
+        )}
 
         {isAnalyzing && (
           <motion.article className="analysis-progress-panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} role="status" aria-live="polite">

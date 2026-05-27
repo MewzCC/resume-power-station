@@ -310,6 +310,8 @@ export function AuthPanel({
           </label>
         )}
 
+        {error && <p className="form-feedback">{error}</p>}
+
         <button className="button button--primary submit-button" disabled={isSubmitting} type="submit">
           {submitText}
         </button>

@@ -20,6 +20,7 @@ import type {
   RestoreHistoryResult,
   SaveResumeVersionPayload,
   SaveResumeVersionResult,
+  SegmentResumeResult,
   SendEmailCodeResult,
   TodayUsage,
   User,
@@ -275,6 +276,15 @@ export function parseResumeFile(file: File, requestOptions: AbortableRequest = {
     body,
     signal: requestOptions.signal,
     timeoutMs: FILE_PARSE_TIMEOUT_MS,
+  })
+}
+
+export function segmentResumeText(input: { resumeText: string; originalName?: string }, requestOptions: AbortableRequest = {}) {
+  return request<SegmentResumeResult>('/api/resumes/segment', {
+    method: 'POST',
+    body: input,
+    signal: requestOptions.signal,
+    timeoutMs: AI_ANALYSIS_TIMEOUT_MS,
   })
 }
 

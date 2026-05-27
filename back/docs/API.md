@@ -91,6 +91,40 @@ fetch(url, { credentials: 'include' })
 { "resumeId": "resume_001" }
 ```
 
+### AI 简历分块整理
+
+`POST /api/resumes/segment`
+
+用于把 PDF/Word 解析出的散乱纯文本整理成标准简历模块。该接口需要登录，会调用 AI，但不扣减每日免费优化次数。
+
+请求：
+
+```json
+{
+  "resumeText": "PDF 或 Word 解析出的简历纯文本",
+  "originalName": "resume.pdf"
+}
+```
+
+响应：
+
+```json
+{
+  "text": "【基本信息】\n张三...\n\n【教育经历】\n...",
+  "sections": [
+    {
+      "title": "基本信息",
+      "type": "basic",
+      "content": "张三...",
+      "confidence": 0.92
+    }
+  ],
+  "warnings": []
+}
+```
+
+`sections[].type` 可选值：`basic`、`intention`、`education`、`skills`、`work`、`internship`、`project`、`campus`、`awards`、`research`、`summary`、`other`。
+
 ### 推荐优化入口
 
 `POST /api/resumes/:id/optimize`

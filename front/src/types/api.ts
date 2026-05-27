@@ -75,6 +75,33 @@ export type ParseResumeResult = {
   size: number
 }
 
+export type ResumeSegmentType =
+  | 'basic'
+  | 'intention'
+  | 'education'
+  | 'skills'
+  | 'work'
+  | 'internship'
+  | 'project'
+  | 'campus'
+  | 'awards'
+  | 'research'
+  | 'summary'
+  | 'other'
+
+export type ResumeSegment = {
+  title: string
+  type: ResumeSegmentType
+  content: string
+  confidence?: number
+}
+
+export type SegmentResumeResult = {
+  text: string
+  sections: ResumeSegment[]
+  warnings: string[]
+}
+
 export type JobStage = 'internship' | 'campus' | 'social' | 'graduate' | 'career_change' | 'other'
 export type OutputLanguage = 'zh' | 'en'
 export type OptimizeLevel = 'conservative' | 'standard' | 'strong'

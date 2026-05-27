@@ -22,6 +22,11 @@ export const createResumeSchema = z.object({
   originalName: z.string().max(255).optional(),
 })
 
+export const segmentResumeSchema = z.object({
+  resumeText: z.string().min(80, '简历正文至少需要 80 个字符').max(12000, '简历正文不能超过 12000 个字符'),
+  originalName: z.string().max(255).optional(),
+})
+
 export const optimizeResumeSchema = z.object({
   targetRole: z.string().min(2).max(100),
   targetJD: z.string().max(8000).optional().default(''),
@@ -53,6 +58,7 @@ export const exportResumeSchema = z.object({
 
 export type AnalyzeResumeInput = z.infer<typeof analyzeResumeSchema>
 export type CreateResumeInput = z.infer<typeof createResumeSchema>
+export type SegmentResumeInput = z.infer<typeof segmentResumeSchema>
 export type OptimizeResumeInput = z.infer<typeof optimizeResumeSchema>
 export type SaveResumeVersionInput = z.infer<typeof saveResumeVersionSchema>
 export type ExportResumeInput = z.infer<typeof exportResumeSchema>

@@ -67,6 +67,38 @@ export const fullAiResultSchema = z.object({
   lapisMarkdown: z.string().min(20),
 })
 
+export const resumeSegmentTypeSchema = z.enum([
+  'basic',
+  'intention',
+  'education',
+  'skills',
+  'work',
+  'internship',
+  'project',
+  'campus',
+  'awards',
+  'research',
+  'summary',
+  'other',
+])
+
+export const resumeSegmentSchema = z.object({
+  title: z.string().trim().min(1).max(40),
+  type: resumeSegmentTypeSchema,
+  content: z.string().trim().min(1),
+  confidence: z.number().min(0).max(1).optional().default(0.75),
+})
+
+export const resumeSegmentResultSchema = z.object({
+  sections: z.array(resumeSegmentSchema).min(1),
+  warnings: z.array(z.string()).optional().default([]),
+})
+
 export type AnalysisResult = z.infer<typeof analysisSchema>
 export type OptimizedResumeResult = z.infer<typeof optimizedResumeSchema>
 export type FullAiResult = z.infer<typeof fullAiResultSchema>
+export type ResumeSegmentType = z.infer<typeof resumeSegmentTypeSchema>
+export type ResumeSegment = z.infer<typeof resumeSegmentSchema>
+export type ResumeSegmentResult = z.infer<typeof resumeSegmentResultSchema> & {
+  text: string
+}

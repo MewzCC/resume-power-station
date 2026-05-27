@@ -1,10 +1,20 @@
 import { buildAnalysisPrompt, ANALYSIS_PROMPT_VERSION } from '../../prompts/analysis.zh.js'
 import { buildFastOptimizePrompt, FAST_OPTIMIZE_PROMPT_VERSION } from '../../prompts/optimize-fast.zh.js'
 import { buildOptimizePrompt, OPTIMIZE_PROMPT_VERSION } from '../../prompts/optimize.zh.js'
+import { buildSegmentPrompt, SEGMENT_PROMPT_VERSION } from '../../prompts/segment.zh.js'
 import { env } from '../lib/env.js'
 import { gradeFromScore } from '../lib/grade.js'
-import { analysisSchema, fullAiResultSchema, optimizedResumeSchema, type FullAiResult } from '../schemas/ai.js'
-import type { AnalyzeResumeInput } from '../schemas/resume.js'
+import {
+  analysisSchema,
+  fullAiResultSchema,
+  optimizedResumeSchema,
+  resumeSegmentResultSchema,
+  type FullAiResult,
+  type ResumeSegment,
+  type ResumeSegmentResult,
+  type ResumeSegmentType,
+} from '../schemas/ai.js'
+import type { AnalyzeResumeInput, SegmentResumeInput } from '../schemas/resume.js'
 import { safeJsonParse } from './json.service.js'
 import { renderOptimizedResumeMarkdown } from './resume-render.service.js'
 import { loadResumeOptimizerSkill } from './skill.service.js'
@@ -293,6 +303,144 @@ function normalizeFastResult(value: unknown) {
   })
 }
 
+const segmentTitleByType: Record<ResumeSegmentType, string> = {
+  basic: '基本信息',
+  intention: '求职意向',
+  education: '教育经历',
+  skills: '专业技能',
+  work: '工作经历',
+  internship: '实习经历',
+  project: '项目经历',
+  campus: '校园经历',
+  awards: '获奖与证书',
+  research: '科研经历',
+  summary: '自我评价',
+  other: '未分组内容',
+}
+
+function normalizedSegmentTitle(section: Pick<ResumeSegment, 'title' | 'type'>) {
+  const title = section.title.trim().replace(/[【】#]/g, '')
+  return title || segmentTitleByType[section.type]
+}
+
+function formatSegmentedResumeText(sections: ResumeSegment[]) {
+  return sections
+    .map((section) => `【${normalizedSegmentTitle(section)}】\n${section.content.trim()}`)
+    .join('\n\n')
+    .trim()
+}
+
+function detectSegmentType(line: string): ResumeSegmentType | null {
+  const text = line.replace(/[【】#\s:：]/g, '')
+  if (/^(基本信息|个人信息|联系方式)$/.test(text)) return 'basic'
+  if (/^(求职意向|应聘岗位|目标岗位)$/.test(text)) return 'intention'
+  if (/^(教育经历|教育背景|学历背景)$/.test(text)) return 'education'
+  if (/^(专业技能|技能清单|技术栈|技能)$/.test(text)) return 'skills'
+  if (/^(工作经历|工作经验)$/.test(text)) return 'work'
+  if (/^(实习经历|实习经验)$/.test(text)) return 'internship'
+  if (/^(项目经历|项目经验|项目)$/.test(text)) return 'project'
+  if (/^(校园经历|校园活动|社团经历)$/.test(text)) return 'campus'
+  if (/^(获奖与证书|证书奖项|获奖证书|奖项|证书)$/.test(text)) return 'awards'
+  if (/^(科研经历|研究经历|论文)$/.test(text)) return 'research'
+  if (/^(自我评价|个人总结|个人简介)$/.test(text)) return 'summary'
+  return null
+}
+
+function heuristicSegmentResume(input: SegmentResumeInput): ResumeSegmentResult {
+  const sections: ResumeSegment[] = []
+  let currentType: ResumeSegmentType = 'basic'
+  let currentTitle = segmentTitleByType.basic
+  let currentLines: string[] = []
+
+  const push = () => {
+    const content = currentLines.join('\n').trim()
+    if (!content) return
+    sections.push({
+      title: currentTitle,
+      type: currentType,
+      content,
+      confidence: currentType === 'other' ? 0.45 : 0.62,
+    })
+  }
+
+  for (const rawLine of input.resumeText.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+
+    const detected = detectSegmentType(line)
+    if (detected) {
+      push()
+      currentType = detected
+      currentTitle = segmentTitleByType[detected]
+      currentLines = []
+      continue
+    }
+
+    currentLines.push(line)
+  }
+  push()
+
+  const normalized = sections.length ? sections : [{
+    title: segmentTitleByType.other,
+    type: 'other' as const,
+    content: input.resumeText.trim(),
+    confidence: 0.3,
+  }]
+
+  return {
+    sections: normalized,
+    warnings: ['已使用规则分块兜底，建议点击 AI 分块获得更准确结果。'],
+    text: formatSegmentedResumeText(normalized),
+  }
+}
+
+function normalizeSegmentResult(value: unknown, input: SegmentResumeInput): ResumeSegmentResult {
+  const parsed = resumeSegmentResultSchema.safeParse(value)
+  if (!parsed.success) {
+    return heuristicSegmentResume(input)
+  }
+
+  const sections = parsed.data.sections
+    .map((section) => ({
+      ...section,
+      title: normalizedSegmentTitle(section),
+      content: section.content.trim(),
+    }))
+    .filter((section) => section.content.length > 0)
+
+  if (!sections.length) {
+    return heuristicSegmentResume(input)
+  }
+
+  return {
+    sections,
+    warnings: parsed.data.warnings,
+    text: formatSegmentedResumeText(sections),
+  }
+}
+
+export async function segmentResumeText(input: SegmentResumeInput): Promise<ResumeSegmentResult> {
+  const compact = {
+    ...input,
+    resumeText: input.resumeText.slice(0, env.aiMaxResumeChars),
+  }
+
+  if (env.mockAi) {
+    return heuristicSegmentResume(compact)
+  }
+
+  const raw = await callChatModel({
+    model: env.fastOptimizeModel,
+    system: '你是简历解析专家，只负责把解析出的简历纯文本分块整理为合法 JSON，不优化、不编造、不删除事实。',
+    user: buildSegmentPrompt(compact),
+    temperature: 0.05,
+    timeoutMs: env.aiRequestTimeoutMs,
+    maxTokens: env.aiMaxOutputTokens,
+  })
+
+  return normalizeSegmentResult(safeJsonParse<Record<string, unknown>>(raw), compact)
+}
+
 async function fastAnalyzeAndOptimizeResume(input: AnalyzeResumeInput): Promise<FullAiResult> {
   const compact = compactInput(input)
   const raw = await callChatModel({
@@ -364,6 +512,7 @@ export async function analyzeAndOptimizeResume(input: AnalyzeResumeInput): Promi
 export const promptVersions = {
   analysis: ANALYSIS_PROMPT_VERSION,
   optimize: env.aiFastMode ? FAST_OPTIMIZE_PROMPT_VERSION : OPTIMIZE_PROMPT_VERSION,
+  segment: SEGMENT_PROMPT_VERSION,
 }
 
 function mockAiResult(input: AnalyzeResumeInput): FullAiResult {
