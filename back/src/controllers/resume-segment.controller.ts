@@ -7,7 +7,7 @@ import {
   authTokenFromRequest,
   requireAuthUser,
 } from '../services/auth.service.js'
-import { AiError, heuristicSegmentResume, segmentResumeText } from '../services/ai.service.js'
+import { AiError, segmentResumeText } from '../services/ai.service.js'
 
 type StreamEvent = Record<string, unknown>
 
@@ -100,23 +100,13 @@ export async function segmentResumeStreamController(request: FastifyRequest, rep
     writeEvent(reply, {
       stage: 'accepted',
       progress: 5,
-      message: '已收到简历文本，正在准备分块。',
-    })
-
-    const preliminary = heuristicSegmentResume(parsed.data)
-    writeEvent(reply, {
-      stage: 'initial_text',
-      progress: 25,
-      message: `已完成初步分块：${preliminary.sections.length} 个模块。`,
-      text: preliminary.text,
-      sections: preliminary.sections,
-      warnings: preliminary.warnings,
+      message: '已收到简历文本，正在调用 AI 分块解析。',
     })
 
     writeEvent(reply, {
       stage: 'segmenting',
-      progress: 55,
-      message: '正在调用 AI 校正文档结构和模块归属。',
+      progress: 35,
+      message: 'AI 正在识别简历模块，请稍候。',
     })
 
     const result = await segmentResumeText(parsed.data)

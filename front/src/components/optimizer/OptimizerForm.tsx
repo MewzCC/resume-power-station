@@ -118,10 +118,6 @@ function analysisWaitingTip(seconds: number, hasServerStage: boolean) {
   return '正在等待后端实时进度，完整分析通常需要 30-90 秒。'
 }
 
-function isPdfFile(file: File) {
-  return file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-}
-
 export function OptimizerForm({
   canSubmit,
   go,
@@ -211,31 +207,18 @@ export function OptimizerForm({
     }
 
     setAnalysisFeedback(null)
+    setResumeText('')
+    setSourceResumeId(undefined)
     setIsParsing(true)
 
     try {
-      const parsedPromise = parseResumeFile(file).catch((error: unknown) => {
-        if (!isPdfFile(file)) throw error
-        return null
-      })
-      const layoutTextPromise = isPdfFile(file)
-        ? import('../../lib/pdf-layout-parser')
-          .then(({ extractPdfTextByLayout }) => extractPdfTextByLayout(file))
-          .catch(() => '')
-        : Promise.resolve('')
-      const [parsed, layoutText] = await Promise.all([parsedPromise, layoutTextPromise])
-      if (!parsed && layoutText.length < 120) {
-        throw new ApiRequestError({ code: 'PARSE_FAILED', message: '文件解析失败，请改用文本粘贴。' })
-      }
-      const cleanedText = layoutText.length >= 120 ? layoutText : cleanResumeText(parsed?.text ?? '')
-      const parsedName = parsed?.originalName ?? file.name
-      let feedback = layoutText.length >= 120
-        ? `已按 PDF 版面解析 ${parsedName}，正在调用 AI 分块整理。`
-        : `已解析并清洗 ${parsedName}，正在调用 AI 分块整理。`
+      const parsed = await parseResumeFile(file)
+      const cleanedText = cleanResumeText(parsed.text)
+      const parsedName = parsed.originalName ?? file.name
+      let feedback = `文件已上传，正在调用 AI 分块解析 ${parsedName}。`
 
-      setResumeText(cleanedText)
       setOriginalName(parsedName)
-      setSourceResumeId(parsed?.resumeId)
+      setSourceResumeId(parsed.resumeId)
       setAnalysisFeedback(feedback)
 
       if (cleanedText.length >= 80) {
@@ -252,16 +235,16 @@ export function OptimizerForm({
           setSourceResumeId(undefined)
           feedback = `文件已解析，AI 已整理出 ${segmented.sections.length} 个模块。`
         } catch (segmentError) {
+          setSourceResumeId(undefined)
           feedback = segmentError instanceof ApiRequestError
-            ? `${feedback.replace('，正在调用 AI 分块整理。', '')}，但 AI 分块失败：${segmentError.message}`
-            : `${feedback.replace('，正在调用 AI 分块整理。', '')}，但 AI 分块失败，请稍后手动点击 AI 分块整理。`
+            ? `AI 分块解析失败：${segmentError.message}`
+            : 'AI 分块解析失败，请稍后重试。'
         } finally {
           setIsSegmenting(false)
         }
       } else {
-        feedback = layoutText.length >= 120
-          ? `已按 PDF 版面解析 ${parsedName}，但正文较短，请检查后再继续。`
-          : `已解析并清洗 ${parsedName}，但正文较短，请检查后再继续。`
+        setSourceResumeId(undefined)
+        throw new ApiRequestError({ code: 'PARSE_FAILED', message: '文件可用文本过少，无法进行 AI 分块解析，请改用文本粘贴。' })
       }
 
       setAnalysisFeedback(feedback)

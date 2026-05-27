@@ -104,7 +104,6 @@ export type SegmentResumeResult = {
 
 export type SegmentResumeStreamStage =
   | 'accepted'
-  | 'initial_text'
   | 'segmenting'
   | 'done'
   | 'error'

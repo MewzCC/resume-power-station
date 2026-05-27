@@ -330,74 +330,10 @@ function formatSegmentedResumeText(sections: ResumeSegment[]) {
     .trim()
 }
 
-function detectSegmentType(line: string): ResumeSegmentType | null {
-  const text = line.replace(/[【】#\s:：]/g, '')
-  if (/^(基本信息|个人信息|联系方式)$/.test(text)) return 'basic'
-  if (/^(求职意向|应聘岗位|目标岗位)$/.test(text)) return 'intention'
-  if (/^(教育经历|教育背景|学历背景)$/.test(text)) return 'education'
-  if (/^(专业技能|技能清单|技术栈|技能)$/.test(text)) return 'skills'
-  if (/^(工作经历|工作经验)$/.test(text)) return 'work'
-  if (/^(实习经历|实习经验)$/.test(text)) return 'internship'
-  if (/^(项目经历|项目经验|项目)$/.test(text)) return 'project'
-  if (/^(校园经历|校园活动|社团经历)$/.test(text)) return 'campus'
-  if (/^(获奖与证书|证书奖项|获奖证书|奖项|证书)$/.test(text)) return 'awards'
-  if (/^(科研经历|研究经历|论文)$/.test(text)) return 'research'
-  if (/^(自我评价|个人总结|个人简介)$/.test(text)) return 'summary'
-  return null
-}
-
-export function heuristicSegmentResume(input: SegmentResumeInput): ResumeSegmentResult {
-  const sections: ResumeSegment[] = []
-  let currentType: ResumeSegmentType = 'basic'
-  let currentTitle = segmentTitleByType.basic
-  let currentLines: string[] = []
-
-  const push = () => {
-    const content = currentLines.join('\n').trim()
-    if (!content) return
-    sections.push({
-      title: currentTitle,
-      type: currentType,
-      content,
-      confidence: currentType === 'other' ? 0.45 : 0.62,
-    })
-  }
-
-  for (const rawLine of input.resumeText.split(/\r?\n/)) {
-    const line = rawLine.trim()
-    if (!line) continue
-
-    const detected = detectSegmentType(line)
-    if (detected) {
-      push()
-      currentType = detected
-      currentTitle = segmentTitleByType[detected]
-      currentLines = []
-      continue
-    }
-
-    currentLines.push(line)
-  }
-  push()
-
-  const normalized = sections.length ? sections : [{
-    title: segmentTitleByType.other,
-    type: 'other' as const,
-    content: input.resumeText.trim(),
-    confidence: 0.3,
-  }]
-
-  return {
-    sections: normalized,
-    warnings: ['已使用规则完成初步分块，AI 分块完成后会自动替换为更准确结果。'],
-    text: formatSegmentedResumeText(normalized),
-  }
-}
-
-function normalizeSegmentResult(value: unknown, input: SegmentResumeInput): ResumeSegmentResult {
+function normalizeSegmentResult(value: unknown): ResumeSegmentResult {
   const parsed = resumeSegmentResultSchema.safeParse(value)
   if (!parsed.success) {
-    return heuristicSegmentResume(input)
+    throw new AiError('AI_JSON_INVALID', 'AI 分块返回格式异常，请稍后重试')
   }
 
   const sections = parsed.data.sections
@@ -409,7 +345,7 @@ function normalizeSegmentResult(value: unknown, input: SegmentResumeInput): Resu
     .filter((section) => section.content.length > 0)
 
   if (!sections.length) {
-    return heuristicSegmentResume(input)
+    throw new AiError('AI_JSON_INVALID', 'AI 分块结果为空，请稍后重试')
   }
 
   return {
@@ -426,7 +362,7 @@ export async function segmentResumeText(input: SegmentResumeInput): Promise<Resu
   }
 
   if (env.mockAi) {
-    return heuristicSegmentResume(compact)
+    throw new AiError('AI_FAILED', 'MOCK_AI 模式不支持 AI 简历分块，请配置真实 AI Key 后重试')
   }
 
   const raw = await callChatModel({
@@ -438,7 +374,7 @@ export async function segmentResumeText(input: SegmentResumeInput): Promise<Resu
     maxTokens: env.aiMaxOutputTokens,
   })
 
-  return normalizeSegmentResult(safeJsonParse<Record<string, unknown>>(raw), compact)
+  return normalizeSegmentResult(safeJsonParse<Record<string, unknown>>(raw))
 }
 
 async function fastAnalyzeAndOptimizeResume(input: AnalyzeResumeInput): Promise<FullAiResult> {

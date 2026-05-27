@@ -129,12 +129,12 @@ fetch(url, { credentials: 'include' })
 
 `POST /api/resumes/segment/stream`
 
-请求体同 `/api/resumes/segment`。响应类型为 `text/event-stream`，用于上传解析后立刻把初步分块内容回填到前端文本框，避免用户空等。
+请求体同 `/api/resumes/segment`。响应类型为 `text/event-stream`，用于向前端推送 AI 分块进度；前端只接收 AI 成功后的分块正文，不再使用规则分块或旧解析结果兜底。
 
 事件格式：
 
 ```text
-data: {"stage":"initial_text","progress":25,"message":"已完成初步分块：6 个模块。","text":"【基本信息】...","sections":[...],"warnings":[]}
+data: {"stage":"done","progress":100,"message":"AI 分块完成：6 个模块。","text":"【基本信息】...","sections":[...],"warnings":[]}
 ```
 
 阶段：
@@ -142,12 +142,11 @@ data: {"stage":"initial_text","progress":25,"message":"已完成初步分块：6
 | stage | 说明 |
 |---|---|
 | `accepted` | 后端已接收简历文本 |
-| `initial_text` | 服务端规则分块已完成，事件中带 `text`，前端应立即写入文本框 |
 | `segmenting` | 正在调用 AI 校正文档结构和模块归属 |
 | `done` | AI 分块完成，事件中包含完整 `result`、`text`、`sections` |
 | `error` | 分块失败，事件中包含 `error` |
 
-前端推荐使用该接口；同步 `/api/resumes/segment` 仅作为兼容回退。
+前端推荐使用该接口；同步 `/api/resumes/segment` 仅作为兼容入口。后端不会再使用规则分块兜底，AI 返回异常时会直接返回错误。
 
 ### 推荐优化入口
 
