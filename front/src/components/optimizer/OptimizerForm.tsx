@@ -217,13 +217,37 @@ export function OptimizerForm({
         throw new ApiRequestError({ code: 'PARSE_FAILED', message: '文件解析失败，请改用文本粘贴。' })
       }
       const cleanedText = layoutText.length >= 120 ? layoutText : cleanResumeText(parsed?.text ?? '')
+      const parsedName = parsed?.originalName ?? file.name
+      let nextText = cleanedText
+      let nextSourceResumeId = parsed?.resumeId
+      let feedback = layoutText.length >= 120
+        ? `已按 PDF 版面解析 ${parsedName}，正在调用 AI 分块整理。`
+        : `已解析并清洗 ${parsedName}，正在调用 AI 分块整理。`
 
-      setResumeText(cleanedText)
-      setOriginalName(parsed?.originalName ?? file.name)
-      setSourceResumeId(parsed?.resumeId)
-      setAnalysisFeedback(layoutText.length >= 120
-        ? `已按 PDF 版面解析 ${parsed?.originalName ?? file.name}，并完成分段整理。`
-        : `已解析并清洗 ${parsed?.originalName ?? file.name}，已去除图标乱码和分页标记。`)
+      if (cleanedText.length >= 80) {
+        setAnalysisFeedback(feedback)
+        setIsSegmenting(true)
+        try {
+          const segmented = await segmentResumeText({
+            resumeText: cleanedText,
+            originalName: parsedName,
+          })
+          nextText = segmented.text
+          nextSourceResumeId = undefined
+          feedback = `文件已解析，AI 已整理出 ${segmented.sections.length} 个模块。`
+        } catch (segmentError) {
+          feedback = segmentError instanceof ApiRequestError
+            ? `${feedback.replace('，正在调用 AI 分块整理。', '')}，但 AI 分块失败：${segmentError.message}`
+            : `${feedback.replace('，正在调用 AI 分块整理。', '')}，但 AI 分块失败，请稍后手动点击 AI 分块整理。`
+        } finally {
+          setIsSegmenting(false)
+        }
+      }
+
+      setResumeText(nextText)
+      setOriginalName(parsedName)
+      setSourceResumeId(nextSourceResumeId)
+      setAnalysisFeedback(feedback)
     } catch (requestError) {
       setAnalysisFeedback(requestError instanceof ApiRequestError ? requestError.message : '文件解析失败，请改用文本粘贴。')
     } finally {
