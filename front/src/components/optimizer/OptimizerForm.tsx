@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChangeEvent, MutableRefObject } from 'react'
+import type { ChangeEvent, DragEvent, MutableRefObject } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CheckCircle2, CloudUpload, Clock3, FileText, LockKeyhole, Sparkles, XCircle, Zap } from 'lucide-react'
 import {
@@ -158,6 +158,7 @@ export function OptimizerForm({
   usage,
 }: OptimizerFormProps) {
   const [isParsing, setIsParsing] = useState(false)
+  const [isDraggingFile, setIsDraggingFile] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const currentStageIndex = activeStageIndex(elapsedSeconds)
   const fallbackStage = analysisStages[currentStageIndex]
@@ -189,10 +190,7 @@ export function OptimizerForm({
     return () => window.clearInterval(timer)
   }, [analysisStartedAt, isAnalyzing])
 
-  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-
+  async function handleResumeFile(file: File) {
     if (!isAuthenticated) {
       setAnalysisFeedback('请先登录后再解析简历文件。')
       go('login')
@@ -228,8 +226,40 @@ export function OptimizerForm({
       setAnalysisFeedback(requestError instanceof ApiRequestError ? requestError.message : '文件解析失败，请改用文本粘贴。')
     } finally {
       setIsParsing(false)
+    }
+  }
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      await handleResumeFile(file)
+    } finally {
       event.target.value = ''
     }
+  }
+
+  function handleUploadDrag(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.type === 'dragenter' || event.type === 'dragover') {
+      setIsDraggingFile(true)
+      event.dataTransfer.dropEffect = 'copy'
+    }
+    if (event.type === 'dragleave') {
+      setIsDraggingFile(false)
+    }
+  }
+
+  async function handleUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsDraggingFile(false)
+
+    const file = event.dataTransfer.files?.[0]
+    if (!file) return
+    await handleResumeFile(file)
   }
 
   function handleCancelAnalyze() {
@@ -355,11 +385,19 @@ export function OptimizerForm({
 
       <form className="form-card" onSubmit={(event) => event.preventDefault()}>
         <FormStep index={1} title="上传或粘贴简历">
-          <label className={`upload-zone ${hasUploadedFile ? 'upload-zone--ready' : ''}`}>
+          <label
+            className={`upload-zone ${hasUploadedFile ? 'upload-zone--ready' : ''} ${isDraggingFile ? 'upload-zone--dragging' : ''}`}
+            onDragEnter={handleUploadDrag}
+            onDragLeave={handleUploadDrag}
+            onDragOver={handleUploadDrag}
+            onDrop={handleUploadDrop}
+          >
             {hasUploadedFile ? <FileText size={34} /> : <CloudUpload size={36} />}
-            <strong>{isParsing ? '正在解析简历...' : hasUploadedFile ? originalName ?? '已填写简历正文' : '点击上传简历文件'}</strong>
+            <strong>{isParsing ? '正在解析简历...' : hasUploadedFile ? originalName ?? '已填写简历正文' : '点击或拖动简历到此处上传简历文件'}</strong>
             <span>
-              {hasUploadedFile
+              {isDraggingFile
+                ? '松开鼠标即可上传并解析文件'
+                : hasUploadedFile
                 ? `已读取 ${resumeText.length} 字，可点击这里重新上传`
                 : '支持 PDF / Word / Markdown / TXT，文件不超过 10MB'}
             </span>
@@ -478,12 +516,6 @@ export function OptimizerForm({
             </div>
           </div>
         </FormStep>
-
-        {analysisFeedback && (
-          <motion.p className="form-feedback" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-            {analysisFeedback}
-          </motion.p>
-        )}
 
         {isAnalyzing && (
           <motion.article className="analysis-progress-panel" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} role="status" aria-live="polite">
